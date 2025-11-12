@@ -16,7 +16,7 @@ import pandas as pd
 import multiprocessing as mp
 
 from itertools import product
-from .constants import AUXILIAR_UNIQUE_REPLACING_STRING, LOGGING_NAMESPACE, RML_EXECUTION, RML_TEMPLATE, RML_REFERENCE
+from .constants import AUXILIAR_UNIQUE_REPLACING_STRING, LOGGING_NAMESPACE, RML_EXECUTION, RML_TEMPLATE, RML_REFERENCE, JELLY, NTRIPLES, NQUADS
 
 LOGGER = logging.getLogger(LOGGING_NAMESPACE)
 
@@ -264,19 +264,77 @@ def normalize_hierarchical_data(data):
         yield data
 
 
-def triples_to_file(triples, config, mapping_group=None):
-    """
-    Writes triples to file.
-    """
+def _bin_append_with_lock(src: str, dest: str) -> None:
+    create_dirs_in_path(dest)
 
-    lock = mp.Lock()    # necessary for issue #65
+    if os.name == 'nt':
+        import msvcrt
+        with open(dest, 'ab') as out, open(src, 'rb') as inp:
+            out.seek(0, os.SEEK_SET)
+            msvcrt.locking(out.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                out.seek(0, os.SEEK_END)
+                out.write(inp.read())
+                out.flush()
+                os.fsync(out.fileno())
+            finally:
+                out.seek(0, os.SEEK_SET)
+                msvcrt.locking(out.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+        with open(dest, 'ab') as out, open(src, 'rb') as inp:
+            fcntl.flock(out, fcntl.LOCK_EX)
+            try:
+                out.seek(0, os.SEEK_END)
+                out.write(inp.read())
+                out.flush()
+                os.fsync(out.fileno())
+            finally:
+                fcntl.flock(out, fcntl.LOCK_UN)
+
+
+def triples_to_file(triples, config, mapping_group=None):
+    fmt = config.get_output_format()
+    dest = config.get_output_file_path(mapping_group)
+
+    if fmt == JELLY:
+        if not triples:
+            return
+
+        is_quads = (config.get_output_format() == NQUADS)
+        g = rdflib.Dataset() if is_quads else rdflib.Graph()
+
+        blob = '.\n'.join(triples) + '.\n'
+        g.parse(data=blob, format=('nquads' if is_quads else 'nt'))
+
+        tmp = f"{dest}.part-{os.getpid()}-{time.time_ns()}.jelly"
+        create_dirs_in_path(tmp)
+        try:
+            g.serialize(destination=tmp, format="jelly")
+        except Exception as e:
+            raise RuntimeError(
+                "JELLY output requires optional dependency. Install: pip install 'morph-kgc[jelly]'"
+            ) from e
+
+        try:
+            _bin_append_with_lock(tmp, dest)
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+        return
+
+    lock = mp.Lock()
     with lock:
-        f = open(config.get_output_file_path(mapping_group), 'a', encoding='utf-8')
+        f = open(dest, 'a', encoding='utf-8')
         for triple in triples:
             f.write(f'{triple} .\n')
         f.flush()
         os.fsync(f.fileno())
         f.close()
+
 
 
 def triples_to_kafka(triples, config):
