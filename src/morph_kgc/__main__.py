@@ -28,11 +28,10 @@ LOGGER = logging.getLogger(LOGGING_NAMESPACE)
 if __name__ == "__main__":
 
     config = load_config_from_command_line()
-    # --- JELLY: ранний выход, до любых retrieve_mappings/prepare_output_files ---
     from .constants import JELLY
     from . import materialize_jelly
 
-    # путь к конфигу как строка (для materialize_set внутри materialize_jelly)
+    # path to the config as a string (for materialize_set)
     config_path = sys.argv[1] if len(sys.argv) > 1 else None
 
     if config.get_output_format() == JELLY:
