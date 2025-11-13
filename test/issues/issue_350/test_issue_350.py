@@ -49,7 +49,7 @@ def _assert_semantics(g: rdflib.Graph):
 
 def test_issue_350_jelly_output_equals_expected(monkeypatch):
     monkeypatch.chdir(HERE)
-    g_exp = _g_from_nt(HERE / "expected.nt")
+    g_exp = _g_from_nt(HERE / "output.nt")
 
     config = (
         "[CONFIGURATION]\n"
@@ -108,6 +108,6 @@ def test_issue_350_nt_cli_semantics(tmp_path: Path):
     assert nt_file.exists()
 
     g_out = _g_from_nt(nt_file)
-    g_exp = _g_from_nt(HERE / "expected.nt")
+    g_exp = _g_from_nt(HERE / "output.nt")
     _assert_semantics(g_out)
     assert len(g_out) == len(g_exp)
