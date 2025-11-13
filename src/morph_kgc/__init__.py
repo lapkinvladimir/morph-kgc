@@ -72,6 +72,37 @@ def materialize(config, python_source=None):
 
     return graph
 
+def materialize_jelly(config, python_source=None):
+    """Materialize everything once and serialize to JELLY (single-process)."""
+    # Gather all triples via existing pipeline (respects config)
+    triples = materialize_set(config, python_source)
+
+    # Resolve config object (accepts path or Config)
+    from .args_parser import load_config_from_argument
+    cfg = load_config_from_argument(config)
+
+    # Optional dependency for JELLY serialization
+    try:
+        from rdflib import ConjunctiveGraph
+        import pyjelly
+    except ImportError as e:
+        raise RuntimeError(
+            "JELLY output requested, but pyjelly[rdflib] is not installed. "
+            "Install: pip install 'morph-kgc[jelly]'"
+        ) from e
+
+    # Build RDF graph from N-Quads text
+    g = ConjunctiveGraph()
+    if triples:
+        nq_data = "\n".join(f"{t} ." for t in triples) + "\n"  # ensure proper termination
+        g.parse(data=nq_data, format="nquads")
+
+    # Serialize once to JELLY
+    from .utils import create_dirs_in_path
+    output_path = cfg.get_output_file_path(None)
+    create_dirs_in_path(output_path)
+    g.serialize(destination=output_path, format="jelly")
+    return output_path
 
 def materialize_oxigraph(config, python_source=None):
     triples = materialize_set(config, python_source)

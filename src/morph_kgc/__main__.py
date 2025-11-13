@@ -5,7 +5,7 @@ __license__ = "Apache-2.0"
 __maintainer__ = "Julián Arenas-Guerrero"
 __email__ = "arenas.guerrero.julian@outlook.com"
 
-
+import sys
 import time
 import logging
 
@@ -28,6 +28,26 @@ LOGGER = logging.getLogger(LOGGING_NAMESPACE)
 if __name__ == "__main__":
 
     config = load_config_from_command_line()
+    # --- JELLY: ранний выход, до любых retrieve_mappings/prepare_output_files ---
+    from .constants import JELLY
+    from . import materialize_jelly
+
+    # путь к конфигу как строка (для materialize_set внутри materialize_jelly)
+    config_path = sys.argv[1] if len(sys.argv) > 1 else None
+
+    if config.get_output_format() == JELLY:
+        if not config_path:
+            LOGGER.error("Config path is missing. Usage: python -m morph_kgc <config.ini>")
+            sys.exit(2)
+
+        LOGGER.info("Output format is JELLY — using Jelly serializer instead of text triple writer.")
+        start_time = time.time()
+
+        out = materialize_jelly(config_path)
+
+        LOGGER.info(f'Jelly file generated: {out}')
+        LOGGER.info(f'Materialization finished in {get_delta_time(start_time)} seconds.')
+        sys.exit(0)
 
     rml_df, fnml_df, http_api_df = retrieve_mappings(config)
     config.set('CONFIGURATION', 'http_api_df', http_api_df.to_csv())
